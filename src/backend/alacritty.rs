@@ -5,6 +5,7 @@ use crate::NVIM_NAME;
 use std::io::Write;
 use std::path::PathBuf;
 use tempfile::NamedTempFile;
+extern crate serde_yaml;
 
 pub const ALACRITTY_NAME: &str = "alacritty";
 
@@ -24,6 +25,11 @@ pub fn init(config: &Config) -> Result<Box<dyn Functions>, GlrnvimError> {
 
 impl Alacritty {
     fn create_conf_file(&mut self, config: &Config) {
+        let base_mapping = serde_yaml::Mapping::new();
+        if !base_mapping.contains_key(&serde_yaml::to_value("font").unwrap()) {
+        }
+        base_mapping.insert()
+
         let mut file = tempfile::NamedTempFile::new().unwrap();
         writeln!(file, "font:").unwrap();
         writeln!(file, "  size: {}", config.font_size).unwrap();
@@ -45,10 +51,36 @@ impl Alacritty {
         file.path();
         self.temp_file = Some(file);
     }
+
+    fn create_base_yaml_mapping() -> serde_yaml::Mapping {
+        let base_confs:[String; 0] = [];
+        let pri_confs:[String; 3] = [
+            "$XDG_CONFIG_HOME/alacritty/alacritty.yml".to_string(),
+            "$HOME/.config/alacritty/alacritty.yml".to_string(),
+            "$XDG_CONFIG_DIRS/alacritty/alacritty.yml".to_string(),
+        ];
+        let confs = super::find_term_conf_files(&base_confs, &pri_confs);
+        if confs.len() > 0 {
+            let path = confs[0].to_owned();
+            let file = std::fs::File::open(path).unwrap();
+            let reader = std::io::BufReader::new(file);
+            match serde_yaml::from_reader(reader) {
+                Ok(mapping) => mapping,
+                Err(_) => {
+                    serde_yaml::Mapping::new()
+                }
+            }
+        } else {
+            serde_yaml::Mapping::new()
+        }
+    }
 }
 
 impl Functions for Alacritty {
     fn create_command(&mut self, config: &Config) -> std::process::Command {
+        let base_conf = Alacritty::create_base_yaml_mapping();
+        println!("{}", serde_yaml::to_string(&base_conf).unwrap());
+
         self.create_conf_file(config);
         let mut command = std::process::Command::new(self.exe_path.to_owned());
         command.arg("--config-file");
